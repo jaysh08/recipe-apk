@@ -5,7 +5,54 @@ import { COMMON_INGREDIENTS } from './types';
 import { fetchIndianRecipes, calculateMatchPercentage, sortRecipesByMatch } from './api';
 
 // Recipe type extended with match percentage
-type RecipeWithMatch = Recipe & { matchPercentage: number; matchedIngredients: string[]; missingIngredients: string[] };
+type RecipeWithMatch = Recipe & { 
+  matchPercentage: number; 
+  matchedIngredients: string[]; 
+  missingIngredients: string[];
+  isCustom?: boolean;
+  isFavorite?: boolean;
+};
+
+// Confetti component
+const Confetti = ({ active }: { active: boolean }) => {
+  if (!active) return null;
+  const colors = ['#87CEEB', '#B5D8FF', '#FFD700', '#FF69B4', '#98FB98'];
+  return (
+    <div className="confetti-container">
+      {[...Array(50)].map((_, i) => (
+        <div
+          key={i}
+          className="confetti"
+          style={{
+            left: `${Math.random() * 100}%`,
+            backgroundColor: colors[Math.floor(Math.random() * colors.length)],
+            animationDelay: `${Math.random() * 0.5}s`,
+            animationDuration: `${1 + Math.random()}s`
+          }}
+        />
+      ))}
+    </div>
+  );
+};
+
+// Floating bubbles
+const FloatingBubbles = () => (
+  <div className="bubbles-container">
+    {[...Array(15)].map((_, i) => (
+      <div
+        key={i}
+        className="bubble"
+        style={{
+          left: `${Math.random() * 100}%`,
+          animationDelay: `${Math.random() * 5}s`,
+          animationDuration: `${10 + Math.random() * 10}s`,
+          width: `${10 + Math.random() * 30}px`,
+          height: `${10 + Math.random() * 30}px`
+        }}
+      />
+    ))}
+  </div>
+);
 
 function App() {
   const [recipes, setRecipes] = useState<RecipeWithMatch[]>([]);
@@ -15,9 +62,25 @@ function App() {
   const [selectedRecipe, setSelectedRecipe] = useState<RecipeWithMatch | null>(null);
   const [showDetail, setShowDetail] = useState(false);
   const [pageLoaded, setPageLoaded] = useState(false);
+  const [showCreateForm, setShowCreateForm] = useState(false);
+  const [customRecipes, setCustomRecipes] = useState<RecipeWithMatch[]>([]);
+  const [favorites, setFavorites] = useState<string[]>([]);
+  const [showConfetti, setShowConfetti] = useState(false);
+  const [activeTab, setActiveTab] = useState<'home' | 'favorites'>('home');
+  
+  // Form state for custom recipe
+  const [newRecipeName, setNewRecipeName] = useState('');
+  const [newRecipeImage, setNewRecipeImage] = useState('');
+  const [newRecipeIngredients, setNewRecipeIngredients] = useState('');
+  const [newRecipeInstructions, setNewRecipeInstructions] = useState('');
 
   useEffect(() => {
     loadRecipes();
+    // Load saved data
+    const savedCustom = localStorage.getItem('customRecipes');
+    const savedFavorites = localStorage.getItem('favorites');
+    if (savedCustom) setCustomRecipes(JSON.parse(savedCustom));
+    if (savedFavorites) setFavorites(JSON.parse(savedFavorites));
     // Trigger entrance animation
     setTimeout(() => setPageLoaded(true), 100);
   }, []);
@@ -28,6 +91,14 @@ function App() {
     }
   }, [selectedIngredients, recipes]);
 
+  useEffect(() => {
+    localStorage.setItem('customRecipes', JSON.stringify(customRecipes));
+  }, [customRecipes]);
+
+  useEffect(() => {
+    localStorage.setItem('favorites', JSON.stringify(favorites));
+  }, [favorites]);
+
   async function loadRecipes() {
     setIsLoading(true);
     try {
@@ -36,7 +107,9 @@ function App() {
         ...recipe,
         matchPercentage: 0,
         matchedIngredients: [],
-        missingIngredients: recipe.ingredients.map(i => i.name)
+        missingIngredients: recipe.ingredients.map(i => i.name),
+        isCustom: false,
+        isFavorite: favorites.includes(recipe.id)
       }));
       setRecipes(recipesWithMatch);
     } catch (error) {
@@ -74,6 +147,61 @@ function App() {
     setSelectedIngredients([]);
   }
 
+  function toggleFavorite(recipeId: string, e?: React.MouseEvent) {
+    e?.stopPropagation();
+    setFavorites(prev => {
+      const newFavorites = prev.includes(recipeId) 
+        ? prev.filter(id => id !== recipeId)
+        : [...prev, recipeId];
+      if (!prev.includes(recipeId)) {
+        setShowConfetti(true);
+        setTimeout(() => setShowConfetti(false), 2000);
+      }
+      return newFavorites;
+    });
+    // Update recipes
+    setRecipes(prev => prev.map(r => ({ ...r, isFavorite: r.id === recipeId ? !r.isFavorite : r.isFavorite })));
+  }
+
+  function createCustomRecipe() {
+    if (!newRecipeName.trim()) return;
+    
+    const ingredients = newRecipeIngredients.split('\n').filter(i => i.trim());
+    const customRecipe: RecipeWithMatch = {
+      id: `custom-${Date.now()}`,
+      name: newRecipeName,
+      image: newRecipeImage || 'https://via.placeholder.com/300x200?text=Custom+Recipe',
+      category: 'Custom',
+      area: 'My Kitchen',
+      instructions: newRecipeInstructions,
+      youtubeUrl: '',
+      ingredients: ingredients.map(ing => {
+        const [measure, ...nameParts] = ing.split(':');
+        return { measure: measure?.trim() || '', name: nameParts.join(':').trim() || ing };
+      }),
+      matchPercentage: 0,
+      matchedIngredients: [],
+      missingIngredients: ingredients,
+      isCustom: true,
+      isFavorite: false
+    };
+    
+    setCustomRecipes(prev => [...prev, customRecipe]);
+    setShowCreateForm(false);
+    setNewRecipeName('');
+    setNewRecipeImage('');
+    setNewRecipeIngredients('');
+    setNewRecipeInstructions('');
+    
+    // Show confetti celebration
+    setShowConfetti(true);
+    setTimeout(() => setShowConfetti(false), 2000);
+  }
+
+  function deleteCustomRecipe(recipeId: string) {
+    setCustomRecipes(prev => prev.filter(r => r.id !== recipeId));
+  }
+
   function openRecipeDetail(recipe: RecipeWithMatch) {
     setSelectedRecipe(recipe);
     setShowDetail(true);
@@ -90,16 +218,49 @@ function App() {
   ).slice(0, 8);
 
   const hasIngredients = selectedIngredients.length > 0;
+  
+  const allRecipes = [...customRecipes, ...recipes];
   const displayRecipes = hasIngredients 
-    ? recipes.filter(r => r.matchPercentage > 0)
-    : recipes;
+    ? allRecipes.filter(r => r.matchPercentage > 0 || r.isCustom)
+    : allRecipes;
+  
+  const favoriteRecipes = allRecipes.filter(r => favorites.includes(r.id));
+
+  // Update recipe matches for custom recipes
+  useEffect(() => {
+    if (customRecipes.length > 0) {
+      setCustomRecipes(prev => prev.map(recipe => {
+        const matchResult = calculateMatchPercentage(selectedIngredients, recipe.ingredients);
+        return { ...recipe, ...matchResult };
+      }));
+    }
+  }, [selectedIngredients]);
 
   return (
     <div className="app">
+      <Confetti active={showConfetti} />
+      <FloatingBubbles />
+      
       {/* Header */}
       <header className={`header ${pageLoaded ? 'loaded' : ''}`}>
         <h1>🍲 Recipe Finder</h1>
         <p>Discover delicious Indian recipes with ingredients you have</p>
+        
+        {/* Tab Navigation */}
+        <div className="tab-nav">
+          <button 
+            className={`tab-btn ${activeTab === 'home' ? 'active' : ''}`}
+            onClick={() => setActiveTab('home')}
+          >
+            🏠 Home
+          </button>
+          <button 
+            className={`tab-btn ${activeTab === 'favorites' ? 'active' : ''}`}
+            onClick={() => setActiveTab('favorites')}
+          >
+            ❤️ Favorites ({favorites.length})
+          </button>
+        </div>
       </header>
 
       {/* Main Content */}
@@ -158,58 +319,182 @@ function App() {
           )}
         </section>
 
-        {/* Recipe Grid */}
-        <section className="recipes-section">
-          <div className="section-header">
-            <h2>{hasIngredients ? 'Matching Recipes' : 'Indian Recipes'}</h2>
-            {hasIngredients && (
-              <span className="match-count">
-                {displayRecipes.length} {displayRecipes.length === 1 ? 'recipe' : 'recipes'} found
-              </span>
-            )}
-          </div>
+        {activeTab === 'home' && (
+          <>
+            {/* Add Custom Recipe Button */}
+            <button className="add-recipe-btn" onClick={() => setShowCreateForm(true)}>
+              ➕ Add Your Recipe
+            </button>
 
-          {isLoading ? (
-            <div className="loading-grid">
-              {[...Array(6)].map((_, i) => (
-                <div key={i} className="skeleton-card">
-                  <div className="skeleton-image"></div>
-                  <div className="skeleton-text"></div>
-                  <div className="skeleton-text short"></div>
+            {/* Recipe Grid */}
+            <section className="recipes-section">
+              <div className="section-header">
+                <h2>{hasIngredients ? 'Matching Recipes' : 'Indian Recipes'}</h2>
+                {hasIngredients && (
+                  <span className="match-count">
+                    {displayRecipes.length} {displayRecipes.length === 1 ? 'recipe' : 'recipes'} found
+                  </span>
+                )}
+              </div>
+
+              {isLoading ? (
+                <div className="loading-grid">
+                  {[...Array(6)].map((_, i) => (
+                    <div key={i} className="skeleton-card">
+                      <div className="skeleton-image"></div>
+                      <div className="skeleton-text"></div>
+                      <div className="skeleton-text short"></div>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-          ) : displayRecipes.length === 0 ? (
-            <div className="no-recipes">
-              <p>No matching recipes found. Try adding more ingredients!</p>
-            </div>
-          ) : (
-            <div className="recipe-grid">
-              {displayRecipes.map((recipe, index) => (
-                <article
-                  key={recipe.id}
-                  className="recipe-card"
-                  style={{ animationDelay: `${index * 100}ms` }}
-                  onClick={() => openRecipeDetail(recipe)}
-                >
-                  <div className="recipe-image-wrapper">
-                    <img src={recipe.image} alt={recipe.name} className="recipe-image" />
-                    {hasIngredients && (
-                      <div className="match-badge">
-                        {recipe.matchPercentage}%
+              ) : displayRecipes.length === 0 ? (
+                <div className="no-recipes">
+                  <p>🍳 No recipes found? Let's get cooking!</p>
+                  <small>Try adding more ingredients or create your own recipe</small>
+                </div>
+              ) : (
+                <div className="recipe-grid">
+                  {displayRecipes.map((recipe, index) => (
+                    <article
+                      key={recipe.id}
+                      className="recipe-card"
+                      style={{ animationDelay: `${index * 100}ms` }}
+                      onClick={() => openRecipeDetail(recipe)}
+                    >
+                      <div className="recipe-image-wrapper">
+                        <img src={recipe.image} alt={recipe.name} className="recipe-image" />
+                        <button 
+                          className={`favorite-btn ${recipe.isFavorite ? 'active' : ''}`}
+                          onClick={(e) => toggleFavorite(recipe.id, e)}
+                        >
+                          {recipe.isFavorite ? '❤️' : '🤍'}
+                        </button>
+                        {hasIngredients && (
+                          <div className="match-badge">
+                            {recipe.matchPercentage}%
+                          </div>
+                        )}
+                        {recipe.isCustom && (
+                          <span className="custom-badge">✨ Custom</span>
+                        )}
                       </div>
-                    )}
-                  </div>
-                  <div className="recipe-info">
-                    <h3 className="recipe-name">{recipe.name}</h3>
-                    <span className="recipe-category">{recipe.category}</span>
-                  </div>
-                </article>
-              ))}
+                      <div className="recipe-info">
+                        <h3 className="recipe-name">{recipe.name}</h3>
+                        <span className="recipe-category">{recipe.category}</span>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              )}
+            </section>
+          </>
+        )}
+
+        {activeTab === 'favorites' && (
+          <section className="recipes-section">
+            <div className="section-header">
+              <h2>❤️ Your Favorites</h2>
+              <span className="match-count">{favoriteRecipes.length} recipes saved</span>
             </div>
-          )}
-        </section>
+
+            {favoriteRecipes.length === 0 ? (
+              <div className="no-recipes">
+                <p>💔 No favorites yet!</p>
+                <small>Tap the heart on recipes you love</small>
+              </div>
+            ) : (
+              <div className="recipe-grid">
+                {favoriteRecipes.map((recipe, index) => (
+                  <article
+                    key={recipe.id}
+                    className="recipe-card"
+                    style={{ animationDelay: `${index * 100}ms` }}
+                    onClick={() => openRecipeDetail(recipe)}
+                  >
+                    <div className="recipe-image-wrapper">
+                      <img src={recipe.image} alt={recipe.name} className="recipe-image" />
+                      <button 
+                        className={`favorite-btn active`}
+                        onClick={(e) => toggleFavorite(recipe.id, e)}
+                      >
+                        ❤️
+                      </button>
+                    </div>
+                    <div className="recipe-info">
+                      <h3 className="recipe-name">{recipe.name}</h3>
+                      <span className="recipe-category">{recipe.category}</span>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            )}
+          </section>
+        )}
       </main>
+
+      {/* Custom Recipe Modal */}
+      {showCreateForm && (
+        <div className="modal-overlay active" onClick={() => setShowCreateForm(false)}>
+          <div className="modal-content" onClick={e => e.stopPropagation()}>
+            <button className="close-btn" onClick={() => setShowCreateForm(false)}>×</button>
+            <div className="modal-title-section">
+              <h2>✨ Create Your Recipe</h2>
+            </div>
+            
+            <div className="create-form">
+              <div className="form-group">
+                <label>Recipe Name *</label>
+                <input 
+                  type="text" 
+                  value={newRecipeName}
+                  onChange={(e) => setNewRecipeName(e.target.value)}
+                  placeholder="e.g., My Special Curry"
+                  className="form-input"
+                />
+              </div>
+              
+              <div className="form-group">
+                <label>Image URL (optional)</label>
+                <input 
+                  type="text" 
+                  value={newRecipeImage}
+                  onChange={(e) => setNewRecipeImage(e.target.value)}
+                  placeholder="https://example.com/image.jpg"
+                  className="form-input"
+                />
+              </div>
+              
+              <div className="form-group">
+                <label>Ingredients (one per line, format: amount : name)</label>
+                <textarea 
+                  value={newRecipeIngredients}
+                  onChange={(e) => setNewRecipeIngredients(e.target.value)}
+                  placeholder="1 cup : Rice
+2 tbsp : Oil
+1 tsp : Salt"
+                  className="form-textarea"
+                  rows={6}
+                />
+              </div>
+              
+              <div className="form-group">
+                <label>Instructions</label>
+                <textarea 
+                  value={newRecipeInstructions}
+                  onChange={(e) => setNewRecipeInstructions(e.target.value)}
+                  placeholder="Step by step cooking instructions..."
+                  className="form-textarea"
+                  rows={5}
+                />
+              </div>
+              
+              <button className="create-btn" onClick={createCustomRecipe}>
+                🎉 Create Recipe
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Recipe Detail Modal */}
       <div className={`modal-overlay ${showDetail ? 'active' : ''}`} onClick={closeRecipeDetail}>
@@ -228,6 +513,24 @@ function App() {
                     {hasIngredients && (
                       <span className="match-badge-large">{selectedRecipe.matchPercentage}% match</span>
                     )}
+                    <button 
+                      className={`favorite-meta-btn ${selectedRecipe.isFavorite ? 'active' : ''}`}
+                      onClick={(e) => toggleFavorite(selectedRecipe.id, e)}
+                    >
+                      {selectedRecipe.isFavorite ? '❤️ Favorite' : '🤍 Add to Favorites'}
+                    </button>
+                    {selectedRecipe.isCustom && (
+                      <button 
+                        className="delete-recipe-btn"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          deleteCustomRecipe(selectedRecipe.id);
+                          closeRecipeDetail();
+                        }}
+                      >
+                        🗑️ Delete
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
@@ -237,7 +540,10 @@ function App() {
                   <h4>✅ You Have</h4>
                   <div className="ingredient-list">
                     {selectedRecipe.matchedIngredients.map(ing => (
-                      <span key={ing} className="ingredient-item matched">{ing}</span>
+                      <span key={ing} className="ingredient-item matched">
+                        <span className="check-icon">✓</span>
+                        {ing}
+                      </span>
                     ))}
                   </div>
                 </div>
@@ -261,6 +567,7 @@ function App() {
                     <li key={index} className="ingredient-list-item">
                       <span className="measure">{ing.measure}</span>
                       <span className={`name ${selectedRecipe.matchedIngredients.includes(ing.name) ? 'matched' : ''}`}>
+                        {selectedRecipe.matchedIngredients.includes(ing.name) && <span className="check-icon">✓</span>}
                         {ing.name}
                       </span>
                     </li>
