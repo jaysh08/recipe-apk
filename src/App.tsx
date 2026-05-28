@@ -3,6 +3,7 @@ import './App.css';
 import type { Recipe } from './types';
 import { COMMON_INGREDIENTS } from './types';
 import { fetchIndianRecipes, calculateMatchPercentage, sortRecipesByMatch } from './api';
+import Splash from './Splash';
 
 // Recipe type extended with match percentage
 type RecipeWithMatch = Recipe & { 
@@ -62,6 +63,7 @@ function App() {
   const [selectedRecipe, setSelectedRecipe] = useState<RecipeWithMatch | null>(null);
   const [showDetail, setShowDetail] = useState(false);
   const [pageLoaded, setPageLoaded] = useState(false);
+  const [showSplash, setShowSplash] = useState(true);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [customRecipes, setCustomRecipes] = useState<RecipeWithMatch[]>([]);
   const [favorites, setFavorites] = useState<string[]>([]);
@@ -238,6 +240,7 @@ function App() {
 
   return (
     <div className="app">
+      {showSplash && <Splash onComplete={() => setShowSplash(false)} />}
       <Confetti active={showConfetti} />
       <FloatingBubbles />
       
