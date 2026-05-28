@@ -16,8 +16,23 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
-    buildTypes {
+    
+    // Signing configuration for release builds
+    signingConfigs {
         release {
+            storeFile file("../recipe-app.keystore")
+            storePassword "recipeapp123"
+            keyAlias "recipeapp"
+            keyPassword "recipeapp123"
+        }
+    }
+    
+    buildTypes {
+        debug {
+            signingConfig signingConfigs.release
+        }
+        release {
+            signingConfig signingConfigs.release
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
