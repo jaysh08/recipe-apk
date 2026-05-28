@@ -1,86 +1,29 @@
 import type { Recipe } from './types';
+import { LOCAL_RECIPES } from './data/recipes';
 
 // Extended recipe type for sorting
 type RecipeWithMatch = Recipe & { matchPercentage: number; matchedIngredients: string[]; missingIngredients: string[] };
 
-const API_BASE = 'https://www.themealdb.com/api/json/v1/1';
-
-// Fetch all Indian recipes
+// Fetch all Indian recipes from local database
 export async function fetchIndianRecipes(): Promise<Recipe[]> {
-  const response = await fetch(`${API_BASE}/filter.php?a=Indian`);
-  const data = await response.json();
-  
-  if (!data.meals) return [];
-  
-  // Get full details for each meal
-  const recipes = await Promise.all(
-    data.meals.slice(0, 30).map(async (meal: { idMeal: string }) => {
-      return fetchRecipeById(meal.idMeal);
-    })
-  );
-  
-  return recipes.filter(Boolean);
+  // Return local recipes (instant, no network required)
+  return LOCAL_RECIPES;
 }
 
-// Fetch recipe details by ID
+// Fetch recipe details by ID from local database
 export async function fetchRecipeById(id: string): Promise<Recipe | null> {
-  try {
-    const response = await fetch(`${API_BASE}/lookup.php?i=${id}`);
-    const data = await response.json();
-    
-    if (!data.meals || data.meals.length === 0) return null;
-    
-    const meal = data.meals[0];
-    return parseMealData(meal);
-  } catch (error) {
-    console.error(`Error fetching recipe ${id}:`, error);
-    return null;
-  }
+  const recipe = LOCAL_RECIPES.find(r => r.id === id);
+  return recipe || null;
 }
 
-// Search recipes by ingredient
+// Search recipes by ingredient (returns matching recipes)
 export async function searchByIngredient(ingredient: string): Promise<Recipe[]> {
-  const response = await fetch(`${API_BASE}/filter.php?i=${encodeURIComponent(ingredient)}`);
-  const data = await response.json();
-  
-  if (!data.meals) return [];
-  
-  const recipes = await Promise.all(
-    data.meals.slice(0, 10).map(async (meal: { idMeal: string }) => {
-      return fetchRecipeById(meal.idMeal);
-    })
+  const lowerIngredient = ingredient.toLowerCase();
+  return LOCAL_RECIPES.filter(recipe => 
+    recipe.ingredients.some(ing => 
+      ing.name.toLowerCase().includes(lowerIngredient)
+    )
   );
-  
-  return recipes.filter(Boolean);
-}
-
-// Parse raw API data into Recipe format
-function parseMealData(meal: any): Recipe {
-  const ingredients: { name: string; measure: string }[] = [];
-  
-  // TheMealDB stores ingredients as strIngredient1, strIngredient2, etc.
-  for (let i = 1; i <= 20; i++) {
-    const name = meal[`strIngredient${i}`];
-    const measure = meal[`strMeasure${i}`];
-    
-    if (name && name.trim()) {
-      ingredients.push({
-        name: name.trim(),
-        measure: measure?.trim() || ''
-      });
-    }
-  }
-  
-  return {
-    id: meal.idMeal,
-    name: meal.strMeal,
-    image: meal.strMealThumb,
-    category: meal.strCategory || '',
-    area: meal.strArea || '',
-    instructions: meal.strInstructions || '',
-    ingredients,
-    youtubeUrl: meal.strYoutube || undefined
-  };
 }
 
 // Calculate match percentage between user ingredients and recipe ingredients
